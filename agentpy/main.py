@@ -1,10 +1,9 @@
 # Simple pygame program
 
 # Import and initialize the pygame library
-import pygame
 import random
 import math
-import numpy as np
+import pygame
 
 class Agent:
     def __init__(self, rect):
@@ -23,11 +22,11 @@ class Agent:
         self.y += self.speed * math.sin(self.angle)
         # bounce back if hit border
         if (self.x < self.world_rect[0] or self.x > self.world_rect[2] or
-            self.y < self.world_rect[1] or self.y > self.world_rect[3]):
+                self.y < self.world_rect[1] or self.y > self.world_rect[3]):
             self.angle += math.pi
 
         # random perturbation to direction
-        if (self.currTime - self.lastDirectionChangeTime > self.directionChangeDuration):
+        if self.currTime - self.lastDirectionChangeTime > self.directionChangeDuration:
             new_angle = random.uniform(0, math.pi / 2)
             self.angle = self.angle * 0.8 + new_angle * 0.2
             self.lastDirectionChangeTime = self.currTime
@@ -40,6 +39,7 @@ class AgentsManager:
     def update(self, timepassed):
         for agent in self.agents:
             agent.update(timepassed)
+
 
 class AgentVisualizer:
     def __init__(self):
@@ -67,10 +67,9 @@ class AgentVisualizer:
         # Flip the display
         pygame.display.flip()
 
+
 if __name__ == '__main__':
-
     vis = AgentVisualizer()
-
     # Run until the user asks to quit
     running = True
     while running:
@@ -81,4 +80,3 @@ if __name__ == '__main__':
                 running = False
 
         vis.update()
-
