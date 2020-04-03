@@ -9,28 +9,41 @@ class Agent:
     def __init__(self, rect):
         self.x = random.uniform(rect[0], rect[0] + rect[2] - 1)
         self.y = random.uniform(rect[1], rect[1] + rect[3] - 1)
-        self.speed = 2
+        self.speed = 1
         self.angle = random.uniform(0, math.pi * 2)
         self.world_rect = [rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]]
         self.lastDirectionChangeTime = 0
-        self.directionChangeDuration = random.uniform(1000, 2000)
+        self.directionChangeDuration = random.uniform(100, 500)
         self.currTime = 0
 
     def update(self, timepassed):
         self.currTime += timepassed
         self.x += self.speed * math.cos(self.angle)
         self.y += self.speed * math.sin(self.angle)
-        # bounce back if hit border
-        if (self.x < self.world_rect[0] or self.x > self.world_rect[2] or
-                self.y < self.world_rect[1] or self.y > self.world_rect[3]):
-            self.angle += math.pi
 
         # random perturbation to direction
         if self.currTime - self.lastDirectionChangeTime > self.directionChangeDuration:
-            new_angle = random.uniform(0, math.pi / 2)
-            self.angle = self.angle * 0.8 + new_angle * 0.2
+            new_angle = random.uniform(-math.pi/4, math.pi/4)
+            self.angle = self.angle + new_angle
             self.lastDirectionChangeTime = self.currTime
 
+        # bounce back if hit border
+        padding = self.speed * 2
+        bounce = False
+        if self.x < self.world_rect[0] + padding:
+            self.x = self.world_rect[0] + padding
+            bounce = True
+        if self.x > self.world_rect[2] - padding:
+            self.x = self.world_rect[2] - padding
+            bounce = True
+        if self.y < self.world_rect[1] + padding:
+            self.y = self.world_rect[1] + padding
+            bounce = True
+        if self.y > self.world_rect[3] - padding:
+            self.y = self.world_rect[3] - padding
+            bounce = True
+        if bounce:
+            self.angle += math.pi
 
 class AgentsManager:
     def __init__(self, numAgents, rect):
@@ -50,7 +63,7 @@ class AgentVisualizer:
         self.WORLD_HEIGHT = 500
         self.WORLD_RECT = pygame.Rect(0, 0, self.WORLD_WIDTH, self.WORLD_HEIGHT) # left, top, width, height
         self.screen = pygame.display.set_mode([self.WORLD_WIDTH, self.WORLD_HEIGHT])
-        self.agentsManager = AgentsManager(100, self.WORLD_RECT)
+        self.agentsManager = AgentsManager(200, self.WORLD_RECT)
         self.clock = pygame.time.Clock()
         self.clock.tick()
 
@@ -62,7 +75,7 @@ class AgentVisualizer:
         self.screen.fill((255, 255, 255))
         self.agentsManager.update(timepassed)
         for agent in self.agentsManager.agents:
-            pygame.draw.circle(self.screen, (0, 0, 0), (int(agent.x), int(agent.y)), 2)
+            pygame.draw.circle(self.screen, (0, 0, 0), (int(agent.x), int(agent.y)), 3)
 
         # Flip the display
         pygame.display.flip()
