@@ -7,13 +7,19 @@
 # Import and initialize the pygame library
 import random
 import math
+import copy
 import numpy as np
 from numpy import linalg as la
 import pygame
 import utils
+import mobMon
+
+Done = False
+
 
 class Object:
     pass
+
 
 class Agent:
     CONFIG = {
@@ -23,33 +29,22 @@ class Agent:
             "wall_buffer": 2
         },
         "boid": {
-            "speed": 3,
+            "speed": 5,
             "cohesion_weight": 0.005,
             "separation_weight": 0.05,
             "alignment_weight": 1.5,
-            "border_handling": "avoid", # avoid or wraparound
+            "border_handling": "avoid",  # avoid or wraparound
             "border_avoid_weight": 0.5,
             "wall_buffer": 5
         }
     }
 
     def __init__(self, rect, agentId):
-        for k, v in self.CONFIG.items():
-            if isinstance(v, dict):
-                v1 = Object()
-                for kk, vv in v.items():
-                    setattr(v1, kk, vv)
-                setattr(self, k, v1)
-            else:
-                setattr(self, k, v)
-
+        # init
         self.fps = 30
         self.loc = np.array(
             [random.uniform(rect[0] + rect[2] / 2, rect[0] + rect[2] - 1),
             random.uniform(rect[1] + rect[3] / 2, rect[1] + rect[3] - 1)])
-        self.max_speed = 2 * self.random_walk.speed / self.fps
-        angle = random.uniform(-math.pi / 4, 0)
-        self.velocity = self.random_walk.speed / self.fps * np.array([math.cos(angle), math.sin(angle)])
         self.bound_ul = np.array([rect[0], rect[1]])
         self.bound_lr = np.array([rect[0] + rect[2], rect[1] + rect[3]])
         self.last_direction_change = 0
@@ -59,6 +54,29 @@ class Agent:
         self.separation = np.zeros(2)
         self.group_velocity = np.zeros(2)
         self.id = agentId
+        self.max_speed = 0
+        self.velocity = np.array([0, 0])
+        # update instance variables based on CONFIG
+        self.update_config('random_walk')
+        # random initial velocity
+        angle = random.uniform(-math.pi / 4, 0)
+        self.velocity = self.random_walk.speed / self.fps * np.array([math.cos(angle), math.sin(angle)])
+
+    def update_config(self, mode):
+        for k, v in self.CONFIG.items():
+            if isinstance(v, dict):
+                v1 = Object()
+                for kk, vv in v.items():
+                    setattr(v1, kk, vv)
+                setattr(self, k, v1)
+            else:
+                setattr(self, k, v)
+        self.max_speed = 2 * Agent.CONFIG[mode]['speed'] / self.fps
+        # update speed
+        speed = la.norm(self.velocity)
+        if speed > 0:
+            self.velocity *= Agent.CONFIG[mode]['speed'] / speed
+
 
     def cap_speed(self, velocity):
         speed = la.norm(velocity)
@@ -72,10 +90,10 @@ class Agent:
 
         # random perturbation to direction
         if time - self.last_direction_change > self.direction_change_period:
-            self.velocity += utils.rotate(self.velocity, random.uniform(-self.random_walk.angular_speed, 
+            self.velocity = utils.rotate(self.velocity, random.uniform(-self.random_walk.angular_speed,
                 self.random_walk.angular_speed))
             self.last_direction_change = time
-        
+
         # avoid borders
         wall_force = np.zeros(2)
         for i in range(2):
@@ -131,14 +149,14 @@ class Agent:
             # Bounce
             if to_lower <= 0:
                 if self.velocity[i] < 0:
-                    delta[i] = 2 * abs(self.velocity[i]) # reverse direction
+                    delta[i] = 2 * abs(self.velocity[i])  # reverse direction
                 self.loc[i] = self.bound_ul[i]
             else:
                 delta[i] += min(1 / to_lower, self.max_speed)
 
             if to_upper <= 0:
                 if self.velocity[i] > 0:
-                    delta[i] = -2 * abs(self.velocity[i]) # reverse direction
+                    delta[i] = -2 * abs(self.velocity[i])  # reverse direction
                 self.loc[i] = self.bound_lr[i]
             else:
                 delta[i] -= min(1 / to_upper, self.max_speed)
@@ -175,13 +193,24 @@ class Agent:
 
     def set_group_velocity(self, velocity, group_size):
         # group velocity excluding one self
-        self.group_velocity = (velocity * group_size - self.velocity) / (group_size - 1)
+        self.group_velocity = (velocity * group_size -
+                               self.velocity) / (group_size - 1)
 
 
 class Mob:
     def __init__(self, num, rect):
         self.agents = [Agent(rect, i) for i in range(num)]
         self.num_agents = num
+        self.mode = 'boid'
+
+    def get_config(self):
+        return Agent.CONFIG
+
+    def set_config(self, config, mode):
+        Agent.CONFIG = copy.deepcopy(config)
+        self.mode = mode
+        for agent in self.agents:
+            agent.update_config(mode)
 
     def update_randomwalk(self, timepassed):
         for agent in self.agents:
@@ -202,7 +231,7 @@ class Mob:
         for a in self.agents:
             a.set_group_center(center, self.num_agents)
             a.set_group_velocity(velocity, self.num_agents)
-            
+
             # calculate separation force
             for b in [self.agents[i] for i in range(a.id + 1, self.num_agents)]:
                 d = b.loc - a.loc
@@ -216,26 +245,35 @@ class Mob:
         for a in self.agents:
             a.update_boid(timepassed)
 
-    def update(self, type, timepassed):
-        if type == "boid":
+    def update(self, timepassed):
+        if self.mode == "boid":
             self.update_boid(timepassed)
         else:
             self.update_randomwalk(timepassed)
 
+
 class AgentVisualizer:
     def __init__(self):
-        pygame.init()
         random.seed()
 
+        # init pygame
+        pygame.init()
         self.WORLD_WIDTH = 750
         self.WORLD_HEIGHT = 750
-        self.WORLD_RECT = pygame.Rect(0, 0, self.WORLD_WIDTH, self.WORLD_HEIGHT) # left, top, width, height
-        self.screen = pygame.display.set_mode([self.WORLD_WIDTH, self.WORLD_HEIGHT])
+        self.WORLD_RECT = pygame.Rect(
+            0, 0, self.WORLD_WIDTH, self.WORLD_HEIGHT)  # left, top, width, height
+        self.screen = pygame.display.set_mode(
+            [self.WORLD_WIDTH, self.WORLD_HEIGHT])
         pygame.display.set_caption('AgentSim')
         self.mob = Mob(75, self.WORLD_RECT)
         self.font = pygame.font.SysFont('Consolas', 16)
         self.clock = pygame.time.Clock()
         self.clock.tick()
+
+        # init tk
+        wi = pygame.display.get_wm_info()
+        w, h = pygame.display.get_surface().get_size()
+        self.monitor_win = mobMon.MonitorWin(self.mob.get_config(), self.mob.mode, self.on_config_update)
 
     def __del__(self):
         pygame.quit()
@@ -245,27 +283,33 @@ class AgentVisualizer:
         self.screen.fill((255, 255, 255))
 
         fps = 'fps: %.2f' % (self.clock.get_fps())
-        text_fps = self.font.render(fps, True, (128, 128, 128)) 
+        text_fps = self.font.render(fps, True, (128, 128, 128))
         self.screen.blit(text_fps, (2, 2))
-        
-        self.mob.update("boid", timepassed)
+
+        self.mob.update(timepassed)
         for agent in self.mob.agents:
             pygame.draw.circle(self.screen, (0, 0, 0), [int(loc) for loc in agent.loc], 3)
 
         # Flip the display
         pygame.display.flip()
 
+    def on_config_update(self, config, mode):
+        self.mob.set_config(config, mode)
+
+    def postion_windows():
+        pass        
+
     def run(self):
         # Run until the user asks to quit
-        running = True
-        while running:
+        global Done
+        while not Done:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    running = False
+                    Done = True
 
-            vis.update()
-
+            self.update()
+            self.monitor_win.update()
 
 if __name__ == '__main__':
     vis = AgentVisualizer()
-    
+    vis.run()
