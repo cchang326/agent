@@ -1,16 +1,18 @@
 # to-do
 # - obstacle avoiding
-# - adjust settings within program
 # - 3D
 # - different looks for each agent
 
 # Import and initialize the pygame library
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
 import random
 import math
 import copy
 import numpy as np
 from numpy import linalg as la
-import pygame
+
 import utils
 import mobMon
 
